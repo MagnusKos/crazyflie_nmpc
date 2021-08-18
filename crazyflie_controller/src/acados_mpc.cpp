@@ -230,23 +230,23 @@ public:
 		}
 
 		// publisher for the real robot inputs (thrust, roll, pitch, yawrate)
-		p_bodytwist = n.advertise<geometry_msgs::Twist>("/crazyflie/cmd_vel", 1);
+		p_bodytwist = n.advertise<geometry_msgs::Twist>("/cf_mpc/cmd_inputs", 1);
 
 		// publisher for the control inputs of acados (motor speeds to be applied)
-		p_motvel = n.advertise<crazyflie_controller::PropellerSpeedsStamped>("/crazyflie/acados_motvel", 1);
+		p_motvel = n.advertise<crazyflie_controller::PropellerSpeedsStamped>("/cf_mpc/acados_mots_rpm", 1);
 
 		// solution
 		p_ol_traj = n.advertise<crazyflie_controller::CrazyflieOpenloopTraj>("/cf_mpc/openloop_traj", 2);
 
 		// subscriber of estimator state
-		s_estimator = n.subscribe("/cf_estimator/state_estimate", 5, &NMPC::iteration, this);
+		s_estimator = n.subscribe("/cf_mpc_est/state_estimate", 5, &NMPC::iteration, this);
 
 		// Initializing control inputs
 		for(unsigned int i=0; i < NU; i++) acados_out.u0[i] = 0.0;
 
 		// Steady-state control input value
 		// (Kg)
-		mq = 33e-3;
+		mq = 35.5e-3; //CF2.1 + Loco board + Flow board
 		// (N/kRPM^2)
 		Ct = 3.25e-4;
 		// steady state prop speed (kRPM)

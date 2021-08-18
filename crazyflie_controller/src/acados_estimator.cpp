@@ -51,6 +51,7 @@
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/QuaternionStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
+#include "geometry_msgs/PoseStamped.h"
 #include <crazyflie_controller/GenericLogData.h>
 #include <crazyflie_controller/EulerAnglesStamped.h>
 #include <crazyflie_controller/CrazyflieStateStamped.h>
@@ -162,6 +163,7 @@ class ESTIMATOR
 	ros::Subscriber s_eRaptor;
 	ros::Subscriber s_euler;
 	ros::Subscriber s_motors;
+	ros::Subscriber s_pose;   //Gets actual position and quaternion
 	// ros::Subscriber s_actual_motors;
 
 	// parameters
@@ -200,10 +202,11 @@ class ESTIMATOR
 	float actual_pitch;
 	float actual_yaw;
 
-	// Variables for eRaptor data
+	// Variables for eRaptor data and for pose
 	float actual_x;
 	float actual_y;
 	float actual_z;
+	Quaterniond actual_quat;
 
 	// Variables for sensor fusion 6
 	float actual_qw;
@@ -243,18 +246,18 @@ class ESTIMATOR
 
 		// publish crazyflie state
 		p_cf_state = n.advertise<crazyflie_controller::CrazyflieStateStamped>(
-			"/cf_estimator/state_estimate",1);
+			"/cf_mpc_est/state_estimate",1);
 		p_cf_euler = n.advertise<crazyflie_controller::EulerAnglesStamped>(
-			"/cf_estimator/euler_angles", 5);
+			"/cf_mpc_est/euler_angles", 5); //don't need this
 
-		// subscriber for the motion capture system position
-		s_eRaptor = n.subscribe("/crazyflie/external_position", 5, &ESTIMATOR::eRaptorCallback, this);
+		// subscriber for the full cf pose, MODIFIED
+		s_pose = n.subscribe("/crazyflie/pose", 5, &ESTIMATOR::poseCallback, this);
 		// subscriber for the IMU linear acceleration and angular velocities from acc and gyro
 		s_imu = n.subscribe("/crazyflie/imu", 5, &ESTIMATOR::imuCallback, this);
 		// subscriber for the IMU stabilizer euler angles
-		s_euler = n.subscribe("/crazyflie/euler_angles", 5, &ESTIMATOR::eulerCallback, this);
+		// s_euler = n.subscribe("/crazyflie/euler_angles", 5, &ESTIMATOR::eulerCallback, this);
 		// subscriber for the motor speeds applied
-		s_motors = n.subscribe("/crazyflie/acados_motvel",5, &ESTIMATOR::motorsCallback, this);
+		s_motors = n.subscribe("/cf_mpc/acados_mots_rpm",5, &ESTIMATOR::motorsCallback, this);
 		// subscriber for sensor fusion returning the quaternion
 		//s_sensorfusion6 = n.subscribe("/crazyflie/sf6",5, &ESTIMATOR::sensorfusion6Callback, this);
 
@@ -480,13 +483,26 @@ class ESTIMATOR
 		actual_m4 = msg->values[3];
 		}
 
-	void eRaptorCallback(const geometry_msgs::PointStampedConstPtr& msg)
+	void eRaptorCallback(const geometry_msgs::PoseStampedConstPtr& msg)
 		{
 		// Position of crazyflie marker
-		actual_x = msg->point.x;
-		actual_y = msg->point.y;
-		actual_z = msg->point.z;
+		actual_x = msg->pose.position.x;
+		actual_y = msg->pose.position.y;
+		actual_z = msg->pose.position.z;
 		}
+
+	void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg)
+	{
+      actual_x = msg->pose.position.x;
+	  actual_y = msg->pose.position.y;
+	  actual_z = msg->pose.position.z;
+
+	  actual_quat.w() = msg->pose.orientation.w;
+	  actual_quat.x() = msg->pose.orientation.x;
+	  actual_quat.y() = msg->pose.orientation.y;
+	  actual_quat.z() = msg->pose.orientation.z;
+	  
+	}
 
 	void eulerCallback(const geometry_msgs::Vector3StampedPtr& msg)
 		{
@@ -533,23 +549,23 @@ class ESTIMATOR
 		sim_acados_in.x0[yq] = actual_y;
 		sim_acados_in.x0[zq] = actual_z;
 
-		// --- Quaternions
-		//
-		// Get the euler angles from the onboard stabilizer
-		euler eu;
-		eu.phi 		= deg2Rad(actual_roll);
-		eu.theta 	= deg2Rad(actual_pitch);
-		eu.psi 		= deg2Rad(actual_yaw);
+		// // --- Quaternions
+		// //
+		// // Get the euler angles from the onboard stabilizer
+		// euler eu;
+		// eu.phi 		= deg2Rad(actual_roll);
+		// eu.theta 	= deg2Rad(actual_pitch);
+		// eu.psi 		= deg2Rad(actual_yaw);
 
-		// Convert IMU euler angles to quaternion
-		Quaterniond q_imu = euler2quatern(eu);
-		q_imu.normalize();
+		// // Convert IMU euler angles to quaternion
+		// Quaterniond q_imu = euler2quatern(eu);
+		// q_imu.normalize();
 
 		// storing converted quaternions
-		sim_acados_in.x0[qw] = q_imu.w();
-		sim_acados_in.x0[qx] = q_imu.x();
-		sim_acados_in.x0[qy] = q_imu.y();
-		sim_acados_in.x0[qz] = q_imu.z();
+		sim_acados_in.x0[qw] = actual_quat.w(); //old one is q_imu.x();
+		sim_acados_in.x0[qx] = actual_quat.x();
+		sim_acados_in.x0[qy] = actual_quat.y();
+		sim_acados_in.x0[qz] = actual_quat.z();
 
 		// -- inertial linear velocities
 		Vector3d vi_mat;
@@ -557,7 +573,7 @@ class ESTIMATOR
 
 		// --- Body linear velocities
 		Vector3d vb_mat;
-		vb_mat = rotateLinearVeloE2B(&q_imu,vi_mat);
+		vb_mat = rotateLinearVeloE2B(&actual_quat,vi_mat);
 
 		// overwriting linear velocities in the body frame in state vector
 		sim_acados_in.x0[vbx] = vb_mat[0];

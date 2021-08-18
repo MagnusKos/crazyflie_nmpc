@@ -25,7 +25,7 @@
 
 from acados_template import *
 import acados_template as at
-from export_ode_model import *
+from export_ode_model_ng import *
 import numpy as np
 import scipy.linalg
 from ctypes import *
@@ -34,7 +34,7 @@ from os.path import dirname, join, abspath
 ACADOS_PATH = join(dirname(abspath(__file__)), "../../../acados")
 
 # create render arguments
-ra = acados_ocp_nlp()
+ra = AcadosOcp()
 
 # export model
 model = export_ode_model()
@@ -160,6 +160,6 @@ ra.acados_lib_path      = f'{ACADOS_PATH}/lib'
 
 ra.model = model
 
-acados_solver = generate_solver(ra, json_file = 'acados_ocp.json')
+acados_solver = AcadosOcpSolver(ra, json_file = 'acados_ocp.json')
 
 print('>> NMPC exported')

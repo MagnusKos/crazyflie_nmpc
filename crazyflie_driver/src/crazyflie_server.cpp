@@ -1,9 +1,10 @@
-  #include <ros/ros.h>
+#include <ros/ros.h>
 #include <ros/callback_queue.h>
 
 #include "crazyflie_driver/AddCrazyflie.h"
 #include "crazyflie_driver/GoTo.h"
 #include "crazyflie_driver/Land.h"
+#include "crazyflie_driver/NotifySetpointsStop.h"
 #include "crazyflie_driver/RemoveCrazyflie.h"
 #include "crazyflie_driver/SetGroupMask.h"
 #include "crazyflie_driver/StartTrajectory.h"
@@ -19,16 +20,14 @@
 #include "crazyflie_driver/Hover.h"
 #include "crazyflie_driver/Stop.h"
 #include "crazyflie_driver/Position.h"
+#include "crazyflie_driver/VelocityWorld.h"
 #include "crazyflie_driver/crtpPacket.h"
 #include "crazyflie_cpp/Crazyradio.h"
 #include "crazyflie_cpp/crtp.h"
 #include "std_srvs/Empty.h"
 #include <std_msgs/Empty.h>
 #include "geometry_msgs/Twist.h"
-#include "geometry_msgs/TwistStamped.h"
-#include "geometry_msgs/QuaternionStamped.h"
 #include "geometry_msgs/PointStamped.h"
-#include "geometry_msgs/Vector3Stamped.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Temperature.h"
@@ -94,10 +93,6 @@ public:
     bool enable_parameters,
     std::vector<crazyflie_driver::LogBlock>& log_blocks,
     bool use_ros_time,
-    bool enable_logging_motors,
-    bool enable_logging_euler_angles,
-    bool enable_logging_kf_quaternion,
-    bool enable_logging_onboard_position,
     bool enable_logging_imu,
     bool enable_logging_temperature,
     bool enable_logging_magnetic_field,
@@ -117,10 +112,6 @@ public:
     , m_enableParameters(enable_parameters)
     , m_logBlocks(log_blocks)
     , m_use_ros_time(use_ros_time)
-    , m_enable_logging_motors(enable_logging_motors)
-    , m_enable_logging_euler_angles(enable_logging_euler_angles)
-    , m_enable_logging_kf_quaternion(enable_logging_kf_quaternion)
-    , m_enable_logging_onboard_position(enable_logging_onboard_position)
     , m_enable_logging_imu(enable_logging_imu)
     , m_enable_logging_temperature(enable_logging_temperature)
     , m_enable_logging_magnetic_field(enable_logging_magnetic_field)
@@ -137,8 +128,10 @@ public:
     , m_serviceGoTo()
     , m_serviceUploadTrajectory()
     , m_serviceStartTrajectory()
+    , m_serviceNotifySetpointsStop()
     , m_subscribeCmdVel()
     , m_subscribeCmdFullState()
+    , m_subscribeCmdVelocityWorld()
     , m_subscribeCmdHover()
     , m_subscribeCmdStop()
     , m_subscribeCmdPosition()
@@ -184,34 +177,6 @@ public:
   }
 
 private:
-
-  struct logMotors{
-    int32_t m1;
-    int32_t m2;
-    int32_t m3;
-    int32_t m4;
-
-  }__attribute__((packed));
-
-  struct logEulerAngles{
-    float roll;
-    float pitch;
-    float yaw;
-  } __attribute__((packed));
-
-  struct logKFquaternion{
-    float q0;
-    float q1;
-    float q2;
-    float q3;
-  } __attribute__((packed));
-
-  struct logOnboardPosition {
-    float x;
-    float y;
-    float z;
-  } __attribute__((packed));
-
   struct logImu {
     float acc_x;
     float acc_y;
@@ -244,12 +209,13 @@ private:
   {
     ROS_FATAL_NAMED(m_tf_prefix, "Emergency requested!");
     m_isEmergency = true;
+    m_cf.emergencyStop();
 
     return true;
   }
 
   template<class T, class U>
-  void updateParam(uint8_t id, const std::string& ros_param) {
+  void updateParam(uint16_t id, const std::string& ros_param) {
       U value;
       ros::param::get(ros_param, value);
       m_cf.setParam<T>(id, (T)value);
@@ -346,12 +312,11 @@ void cmdPositionSetpoint(
   {
     if (!m_isEmergency) {
       float roll = msg->linear.y + m_roll_trim;
-      float pitch = msg->linear.x + m_pitch_trim;
-      //float pitch = - (msg->linear.x + m_pitch_trim);
+      float pitch = - (msg->linear.x + m_pitch_trim);
       float yawrate = msg->angular.z;
       uint16_t thrust = std::min<uint16_t>(std::max<float>(msg->linear.z, 0.0), 60000);
 
-	  m_cf.sendSetpoint(roll, pitch, yawrate, thrust);
+      m_cf.sendSetpoint(roll, pitch, yawrate, thrust);
       m_sentSetpoint = true;
     }
   }
@@ -390,6 +355,23 @@ void cmdPositionSetpoint(
     }
   }
 
+  void cmdVelocityWorldSetpoint(
+    const crazyflie_driver::VelocityWorld::ConstPtr& msg)
+  {
+    //ROS_INFO("got a velocity world setpoint");
+    if (!m_isEmergency) {
+      float x = msg->vel.x;
+      float y = msg->vel.y;
+      float z = msg->vel.z;
+      float yawRate = msg->yawRate;
+
+      m_cf.sendVelocityWorldSetpoint(
+        x, y, z, yawRate);
+      m_sentSetpoint = true;
+      //ROS_INFO("set a velocity world setpoint");
+    }
+  }
+
   void positionMeasurementChanged(
     const geometry_msgs::PointStamped::ConstPtr& msg)
   {
@@ -413,6 +395,7 @@ void cmdPositionSetpoint(
 
     m_subscribeCmdVel = n.subscribe(m_tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
     m_subscribeCmdFullState = n.subscribe(m_tf_prefix + "/cmd_full_state", 1, &CrazyflieROS::cmdFullStateSetpoint, this);
+    m_subscribeCmdVelocityWorld = n.subscribe(m_tf_prefix+"/cmd_velocity_world", 1, &CrazyflieROS::cmdVelocityWorldSetpoint, this);
     m_subscribeExternalPosition = n.subscribe(m_tf_prefix + "/external_position", 1, &CrazyflieROS::positionMeasurementChanged, this);
     m_subscribeExternalPose = n.subscribe(m_tf_prefix + "/external_pose", 1, &CrazyflieROS::poseMeasurementChanged, this);
     m_serviceEmergency = n.advertiseService(m_tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
@@ -428,19 +411,8 @@ void cmdPositionSetpoint(
     m_serviceGoTo = n.advertiseService(m_tf_prefix + "/go_to", &CrazyflieROS::goTo, this);
     m_serviceUploadTrajectory = n.advertiseService(m_tf_prefix + "/upload_trajectory", &CrazyflieROS::uploadTrajectory, this);
     m_serviceStartTrajectory = n.advertiseService(m_tf_prefix + "/start_trajectory", &CrazyflieROS::startTrajectory, this);
+    m_serviceNotifySetpointsStop = n.advertiseService(m_tf_prefix + "/notify_setpoints_stop", &CrazyflieROS::notifySetpointsStop, this);
 
-    if (m_enable_logging_motors) {
-      m_pubMotors = n.advertise<geometry_msgs::QuaternionStamped>(m_tf_prefix + "/motors", 10);
-    }
-    if (m_enable_logging_euler_angles) {
-      m_pubEuler = n.advertise<geometry_msgs::Vector3Stamped>(m_tf_prefix + "/euler_angles", 10);
-    }
-    if (m_enable_logging_kf_quaternion) {
-      m_pubKFquaternion = n.advertise<geometry_msgs::QuaternionStamped>(m_tf_prefix + "/kf_quaternion", 10);
-    }
-    if (m_enable_logging_onboard_position) {
-      m_pubOnboardPosition = n.advertise<geometry_msgs::PoseStamped>(m_tf_prefix + "/onboard_position", 10);
-    }
     if (m_enable_logging_imu) {
       m_pubImu = n.advertise<sensor_msgs::Imu>(m_tf_prefix + "/imu", 10);
     }
@@ -516,10 +488,6 @@ void cmdPositionSetpoint(
       m_serviceUpdateParams = n.advertiseService(m_tf_prefix + "/update_params", &CrazyflieROS::updateParams, this);
     }
 
-    std::unique_ptr<LogBlock<logMotors> > logBlockMotors;
-    std::unique_ptr<LogBlock<logEulerAngles> > logBlockEuler;
-    std::unique_ptr<LogBlock<logKFquaternion> > logBlockKFquaternion;
-    std::unique_ptr<LogBlock<logOnboardPosition> > logBlockOnboardPosition;
     std::unique_ptr<LogBlock<logImu> > logBlockImu;
     std::unique_ptr<LogBlock<log2> > logBlock2;
     std::unique_ptr<LogBlock<logPose> > logBlockPose;
@@ -531,56 +499,6 @@ void cmdPositionSetpoint(
 
       ROS_INFO_NAMED(m_tf_prefix, "Requesting Logging variables...");
       m_cf.requestLogToc();
-
-      if (m_enable_logging_motors) {
-        std::function<void(uint32_t, logMotors*)> cb = std::bind(&CrazyflieROS::onMotorsData, this, std::placeholders::_1, std::placeholders::_2);
-
-        logBlockMotors.reset(new LogBlock<logMotors>(
-          &m_cf,{
-            {"motor", "m1"},
-            {"motor", "m2"},
-            {"motor", "m3"},
-            {"motor", "m4"},
-          }, cb));
-        logBlockMotors->start(1); // 10ms
-      }
-
-      if (m_enable_logging_euler_angles) {
-        std::function<void(uint32_t, logEulerAngles*)> cb = std::bind(&CrazyflieROS::onStabilizerData, this, std::placeholders::_1, std::placeholders::_2);
-
-        logBlockEuler.reset(new LogBlock<logEulerAngles>(
-          &m_cf,{
-            {"stabilizer", "roll"},
-            {"stabilizer", "pitch"},
-            {"stabilizer", "yaw"},
-          }, cb));
-        logBlockEuler->start(1); // 10ms
-      }
-
-      if (m_enable_logging_kf_quaternion) {
-        std::function<void(uint32_t, logKFquaternion*)> cb = std::bind(&CrazyflieROS::onKFData, this, std::placeholders::_1, std::placeholders::_2);
-
-        logBlockKFquaternion.reset(new LogBlock<logKFquaternion>(
-          &m_cf,{
-            {"kalman", "q0"},
-            {"kalman", "q1"},
-            {"kalman", "q2"},
-            {"kalman", "q3"},
-          }, cb));
-        logBlockKFquaternion->start(1); // 10ms
-      }
-
-      if (m_enable_logging_onboard_position) {
-        std::function<void(uint32_t, logOnboardPosition*)> cb = std::bind(&CrazyflieROS::onOnboardPositionData, this, std::placeholders::_1, std::placeholders::_2);
-
-        logBlockOnboardPosition.reset(new LogBlock<logOnboardPosition>(
-          &m_cf,{
-            {"stateEstimate", "x"},
-            {"stateEstimate", "y"},
-            {"stateEstimate", "z"},
-          }, cb));
-        logBlockOnboardPosition->start(1); // 10ms
-      }
 
       if (m_enable_logging_imu) {
         std::function<void(uint32_t, logImu*)> cb = std::bind(&CrazyflieROS::onImuData, this, std::placeholders::_1, std::placeholders::_2);
@@ -685,83 +603,6 @@ void cmdPositionSetpoint(
        m_cf.sendSetpoint(0, 0, 0, 0);
     }
 
-  }
-
-  // Get motors RPM
-  void onMotorsData(uint32_t time_in_ms, logMotors* data){
-    if (m_enable_logging_kf_quaternion) {
-      geometry_msgs::QuaternionStamped msg;
-      if (m_use_ros_time) {
-        msg.header.stamp = ros::Time::now();
-      } else {
-        msg.header.stamp = ros::Time(time_in_ms / 1000.0);
-      }
-      msg.header.frame_id = m_tf_prefix + "/base_link";
-
-      msg.quaternion.w = data->m1;
-      msg.quaternion.x = data->m2;
-      msg.quaternion.y = data->m3;
-      msg.quaternion.z = data->m4;
-
-      m_pubMotors.publish(msg);
-    }
-  }
-
-  // Get the euler angles from the STABILIZER
-  void onStabilizerData(uint32_t time_in_ms, logEulerAngles* data) {
-    if (m_enable_logging_euler_angles) {
-      geometry_msgs::Vector3Stamped msg;
-      if (m_use_ros_time) {
-        msg.header.stamp = ros::Time::now();
-      } else {
-        msg.header.stamp = ros::Time(time_in_ms / 1000.0);
-      }
-
-      msg.vector.x = data->roll;
-      msg.vector.y = data->pitch;
-      msg.vector.z = data->yaw;
-
-      m_pubEuler.publish(msg);
-    }
-  }
-
-  // Get quaternion from onboard kalman
-  void onKFData(uint32_t time_in_ms, logKFquaternion* data){
-    if (m_enable_logging_kf_quaternion) {
-      geometry_msgs::QuaternionStamped msg;
-      if (m_use_ros_time) {
-        msg.header.stamp = ros::Time::now();
-      } else {
-        msg.header.stamp = ros::Time(time_in_ms / 1000.0);
-      }
-      msg.header.frame_id = m_tf_prefix + "/base_link";
-
-      msg.quaternion.w = data->q0;
-      msg.quaternion.x = data->q1;
-      msg.quaternion.y = data->q2;
-      msg.quaternion.z = data->q3;
-
-      m_pubKFquaternion.publish(msg);
-    }
-  }
-
-  // Get estimated position from onboard kalman
-  void onOnboardPositionData(uint32_t time_in_ms, logOnboardPosition* data) {
-    if (m_enable_logging_imu) {
-      geometry_msgs::PoseStamped msg;
-      if (m_use_ros_time) {
-        msg.header.stamp = ros::Time::now();
-      } else {
-        msg.header.stamp = ros::Time(time_in_ms / 1000.0);
-      }
-      msg.header.frame_id = m_tf_prefix + "/base_link";
-
-      msg.pose.position.x = data->x;
-      msg.pose.position.y = data->y;
-      msg.pose.position.z = data->z;
-
-      m_pubOnboardPosition.publish(msg);
-    }
   }
 
   void onImuData(uint32_t time_in_ms, logImu* data) {
@@ -991,6 +832,15 @@ void cmdPositionSetpoint(
     return true;
   }
 
+  bool notifySetpointsStop(
+    crazyflie_driver::NotifySetpointsStop::Request& req,
+    crazyflie_driver::NotifySetpointsStop::Response& res)
+  {
+    ROS_INFO_NAMED(m_tf_prefix, "NotifySetpointsStop requested");
+    m_cf.notifySetpointsStop(req.remainValidMillisecs);
+    return true;
+  }
+
 private:
   std::string m_tf_prefix;
   Crazyflie m_cf;
@@ -1001,10 +851,6 @@ private:
   bool m_enableParameters;
   std::vector<crazyflie_driver::LogBlock> m_logBlocks;
   bool m_use_ros_time;
-  bool m_enable_logging_motors;
-  bool m_enable_logging_euler_angles;
-  bool m_enable_logging_kf_quaternion;
-  bool m_enable_logging_onboard_position;
   bool m_enable_logging_imu;
   bool m_enable_logging_temperature;
   bool m_enable_logging_magnetic_field;
@@ -1025,6 +871,7 @@ private:
   ros::ServiceServer m_serviceGoTo;
   ros::ServiceServer m_serviceUploadTrajectory;
   ros::ServiceServer m_serviceStartTrajectory;
+  ros::ServiceServer m_serviceNotifySetpointsStop;
 
   ros::Subscriber m_subscribeCmdVel;
   ros::Subscriber m_subscribeCmdFullState;
@@ -1033,11 +880,8 @@ private:
   ros::Subscriber m_subscribeCmdPosition;
   ros::Subscriber m_subscribeExternalPosition;
   ros::Subscriber m_subscribeExternalPose;
-  ros::Publisher m_pubMotors;
-  ros::Publisher m_pubEuler;
+  ros::Subscriber m_subscribeCmdVelocityWorld;
   ros::Publisher m_pubImu;
-  ros::Publisher m_pubKFquaternion;
-  ros::Publisher m_pubOnboardPosition;
   ros::Publisher m_pubTemp;
   ros::Publisher m_pubMag;
   ros::Publisher m_pubPressure;
@@ -1114,10 +958,6 @@ private:
       req.enable_parameters,
       req.log_blocks,
       req.use_ros_time,
-      req.enable_logging_motors,
-      req.enable_logging_euler_angles,
-      req.enable_logging_kf_quaternion,
-      req.enable_logging_onboard_position,
       req.enable_logging_imu,
       req.enable_logging_temperature,
       req.enable_logging_magnetic_field,

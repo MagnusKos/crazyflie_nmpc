@@ -33,6 +33,7 @@
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/QuaternionStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
+#include <geometry_msgs/PoseStamped.h>
 
 
 #include "crazyflie_controller/GenericLogData.h"
@@ -94,8 +95,8 @@ class meas_vec
   };
 
   ros::Subscriber s_imu;
-	ros::Subscriber s_eRaptor;
-	ros::Subscriber s_euler;
+	ros::Subscriber s_pose;
+	ros::Subscriber s_bat;
 	ros::Subscriber s_motors;
 
   ros::Publisher p_cf_state;
@@ -130,9 +131,9 @@ public:
       p_cf_state = nh.advertise<crazyflie_controller::CrazyflieStateStamped>(
         "/cf_estimator/state_estimate",1);
       // subscriber for the motion capture system position
-    	s_eRaptor = nh.subscribe("/crazyflie/external_position", 5, &meas_vec::eRaptorCallback, this);
+    	s_pose = nh.subscribe("/crazyflie/pose", 5, &meas_vec::poseCallback, this);
     	/// subscriber for the IMU stabilizer euler angles
-  		s_euler   = nh.subscribe("/crazyflie/euler_angles", 5, &meas_vec::eulerCallback, this);
+  		s_bat   = nh.subscribe("/crazyflie/battery", 5, &meas_vec::batCallback, this);
       // subscriber for the IMU linear acceleration and angular velocities from acc and gyro
   		s_imu     = nh.subscribe("/crazyflie/imu", 5, &meas_vec::imuCallback, this);
       // subscriber fro the motors rpm
@@ -197,15 +198,15 @@ public:
   	actual_m4 = msg->values[3];
   }
 
-  void eRaptorCallback(const geometry_msgs::PointStampedConstPtr& msg){
+  void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg){
 
   	// Position of crazyflie marker
-  	actual_x = msg->point.x;
-  	actual_y = msg->point.y;
-  	actual_z = msg->point.z;
+  	actual_x = msg->pose.position.x;
+  	actual_y = msg->pose.position.y;
+  	actual_z = msg->pose.position.z;
   }
 
-  void eulerCallback(const geometry_msgs::Vector3StampedPtr& msg){
+  void batCallback(const geometry_msgs::Vector3StampedPtr& msg){
 
     // Euler angles
   	actual_roll  = msg->vector.x;

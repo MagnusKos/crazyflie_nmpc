@@ -2,7 +2,6 @@
 <launch>
 	<arg name="uri" default="radio://0/80/2M/E7E7E7E703" />
 	<!--arg name="frame" default="/mocap" /-->
-
 	<include file="$(find crazyflie_driver)/launch/crazyflie_server.launch">
 	</include>
 
@@ -42,19 +41,15 @@
 				pkg="rosbag"
 				type="record"
 				args="record -o /home/constantine/cf_mpc.bag
-					/cf_mpc/openloop_traj
 					/cf_mpc_est/state_estimate
-					/cf_mpc/cmd_inputs
-					/cf_mpc/acados_mots_rpm
 					/crazyflie/pose"
 				>
 	</node>
 
-	<node name="nmpc" pkg="crazyflie_controller" type="acados_mpc" output="screen" ns="crazyflie"
-	launch-prefix="xterm -e gdb --args">
-		<!--param name="ref_traj" value="$(find crazyflie_controller)/traj/smooth_step.txt"/-->
+	<!--node name="nmpc" pkg="crazyflie_controller" type="acados_mpc" output="screen" ns="crazyflie">
+		<param name="ref_traj" value="$(find crazyflie_controller)/traj/smooth_step.txt"/>
 		<param name="ref_traj" value="$(find crazyflie_controller)/traj/helix_traj.txt"/>
-	</node>
+	</node-->
 
 	<node name="estimator" pkg="crazyflie_controller" type="acados_estimator" output="screen" ns="crazyflie">
 		<param name="delay" value='0.06'/>

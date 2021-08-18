@@ -10,9 +10,9 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   crazyflie_cpp
 )
-# Enable C++11
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-#SET(CMAKE_CXX_COMPILER             "gcc-4.9")
+
+set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -33,6 +33,7 @@ add_service_files(
   AddCrazyflie.srv
   GoTo.srv
   Land.srv
+  NotifySetpointsStop.srv
   RemoveCrazyflie.srv
   SetGroupMask.srv
   StartTrajectory.srv
@@ -48,6 +49,7 @@ add_message_files(
   LogBlock.msg
   GenericLogData.msg
   FullState.msg
+  VelocityWorld.msg
   TrajectoryPolynomialPiece.msg
   crtpPacket.msg
   Hover.msg
