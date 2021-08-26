@@ -19,6 +19,11 @@ set(acados_lib "${PROJECT_SOURCE_DIR}/../acados/lib")
 
 set(full_model_build ${PROJECT_SOURCE_DIR}/scripts/crazyflie_full_model/c_generated_code)
 
+set(model_obj 
+    ${full_model_build}/crazyflie_model/crazyflie_expl_ode_fun.o
+	${full_model_build}/crazyflie_model/crazyflie_expl_vde_forw.o)
+
+
 generate_dynamic_reconfigure_options(
 	config/crazyflie_params.cfg
 	config/crazyflie_estimator.cfg
@@ -68,6 +73,7 @@ link_directories(${full_model_build})
 add_executable(acados_mpc src/acados_mpc.cpp)
 target_link_libraries(acados_mpc
 	${full_model_build}/libacados_solver_crazyflie.so
+	${full_model_build}/libacados_ocp_solver_crazyflie.so
 	${acados_lib}/libacados.so
 	${catkin_LIBRARIES}
 )
@@ -78,7 +84,10 @@ add_dependencies(acados_mpc ${PROJECT_NAME}_gencpp)
 add_executable(acados_estimator src/acados_estimator.cpp)
 target_link_libraries(acados_estimator
 	${full_model_build}/libacados_solver_crazyflie.so
+	${full_model_build}/libacados_sim_solver_crazyflie.so
+	${full_model_build}/libacados_ocp_solver_crazyflie.so
 	${acados_lib}/libacados.so
+	${model_obj}
 	${catkin_LIBRARIES}
 )
 add_dependencies(acados_estimator ${PROJECT_NAME}_gencfg)

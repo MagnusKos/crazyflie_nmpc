@@ -67,6 +67,7 @@
 #include "acados/utils/print.h"
 #include "acados_c/ocp_nlp_interface.h"
 #include "acados_c/external_function_interface.h"
+#include "acados_c/sim_interface.h"
 // blasfeo
 #include "blasfeo/include/blasfeo_d_aux.h"
 #include "blasfeo/include/blasfeo_d_aux_ext_dep.h"
@@ -193,6 +194,7 @@ class ESTIMATOR
 	sim_solver_input sim_acados_in;
 	sim_solver_output sim_acados_out;
 	int sim_acados_status;
+	sim_solver_capsule * sim_acados_cap;       //new acados structure, includes "in" and "out"
 
 	// Variables for reading the IMU data
 	float actual_wx;
@@ -235,9 +237,10 @@ class ESTIMATOR
 
 	ESTIMATOR(ros::NodeHandle& n, double delay)
 		{
+		sim_acados_cap = crazyflie_acados_sim_solver_create_capsule();
 
 		int status = 0;
-		status = crazyflie_acados_sim_create();
+		status = crazyflie_acados_sim_create(sim_acados_cap);
 
 		if (status){
 			ROS_INFO_STREAM("acados_sim_create() returned status " << status << ". Exiting." << endl);
@@ -545,9 +548,13 @@ class ESTIMATOR
 		double dt = e.current_real.toSec() - e.last_real.toSec();
 
 		// --- Position
-		sim_acados_in.x0[xq] = actual_x;
+		/*sim_acados_in.x0[xq] = actual_x;
 		sim_acados_in.x0[yq] = actual_y;
-		sim_acados_in.x0[zq] = actual_z;
+		sim_acados_in.x0[zq] = actual_z; */
+
+		sim_acados_cap->acados_sim_in->x[xq] = actual_x;
+		sim_acados_cap->acados_sim_in->x[yq] = actual_y;
+		sim_acados_cap->acados_sim_in->x[zq] = actual_z;
 
 		// // --- Quaternions
 		// //
@@ -562,10 +569,15 @@ class ESTIMATOR
 		// q_imu.normalize();
 
 		// storing converted quaternions
-		sim_acados_in.x0[qw] = actual_quat.w(); //old one is q_imu.x();
+		/*sim_acados_in.x0[qw] = actual_quat.w(); //old one is q_imu.x();
 		sim_acados_in.x0[qx] = actual_quat.x();
 		sim_acados_in.x0[qy] = actual_quat.y();
-		sim_acados_in.x0[qz] = actual_quat.z();
+		sim_acados_in.x0[qz] = actual_quat.z(); */
+
+		sim_acados_cap->acados_sim_in->x[qw] = actual_quat.w();
+		sim_acados_cap->acados_sim_in->x[qx] = actual_quat.x();
+		sim_acados_cap->acados_sim_in->x[qy] = actual_quat.y();
+		sim_acados_cap->acados_sim_in->x[qz] = actual_quat.z();
 
 		// -- inertial linear velocities
 		Vector3d vi_mat;
@@ -576,37 +588,51 @@ class ESTIMATOR
 		vb_mat = rotateLinearVeloE2B(&actual_quat,vi_mat);
 
 		// overwriting linear velocities in the body frame in state vector
-		sim_acados_in.x0[vbx] = vb_mat[0];
+		/*sim_acados_in.x0[vbx] = vb_mat[0];
 		sim_acados_in.x0[vby] = vb_mat[1];
-		sim_acados_in.x0[vbz] = vb_mat[2];
+		sim_acados_in.x0[vbz] = vb_mat[2]; */
+
+		sim_acados_cap->acados_sim_in->x[vbx] = vb_mat[0];
+		sim_acados_cap->acados_sim_in->x[vby] = vb_mat[1];
+		sim_acados_cap->acados_sim_in->x[vbz] = vb_mat[2];
 
 		// --- Body angular velocities
-		sim_acados_in.x0[wx] = actual_wx;
+		/*sim_acados_in.x0[wx] = actual_wx;
 		sim_acados_in.x0[wy] = actual_wy;
-		sim_acados_in.x0[wz] = actual_wz;
+		sim_acados_in.x0[wz] = actual_wz; */
+
+		sim_acados_cap->acados_sim_in->x[wx] = actual_wx;
+		sim_acados_cap->acados_sim_in->x[wy] = actual_wy;
+		sim_acados_cap->acados_sim_in->x[wz] = actual_wz;
 
 		// set discretization time
-		sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "T", &delay);
+		//sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "T", &delay);
+		sim_acados_cap->acados_sim_in->T = delay;
 
 		// ROS_INFO_STREAM("Delay: " << delay << endl);
 
 		// set initial state
-		sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "x", sim_acados_in.x0);
+		//sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "x", sim_acados_in.x0);
 
 		// set control
-		sim_acados_in.u0[w1] = acados_w1_latest;
+		/*sim_acados_in.u0[w1] = acados_w1_latest;
 		sim_acados_in.u0[w2] = acados_w2_latest;
 		sim_acados_in.u0[w3] = acados_w3_latest;
-		sim_acados_in.u0[w4] = acados_w4_latest;
+		sim_acados_in.u0[w4] = acados_w4_latest; */
 
-		sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "u", sim_acados_in.u0);
+		sim_acados_cap->acados_sim_in->u[w1] = acados_w1_latest;
+		sim_acados_cap->acados_sim_in->u[w2] = acados_w2_latest;
+		sim_acados_cap->acados_sim_in->u[w3] = acados_w3_latest;
+		sim_acados_cap->acados_sim_in->u[w4] = acados_w4_latest;
+
+		//sim_in_set(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_in, "u", sim_acados_in.u0);
 
 		// solve
-		sim_acados_status = crazyflie_acados_sim_solve();
+		sim_acados_status = crazyflie_acados_sim_solve(sim_acados_cap);
 		// ROS_INFO_STREAM("Sim solver : " << sim_acados_status << endl);
 
 		// get and print output
-		sim_out_get(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_out, "xn", sim_acados_out.xn);
+		//sim_out_get(crazyflie_sim_config, crazyflie_sim_dims, crazyflie_sim_out, "xn", sim_acados_out.xn);
 
 		// assign output signals
 		sim_acados_out.status = sim_acados_status;
@@ -631,7 +657,7 @@ class ESTIMATOR
 		crazyflie_state.rates.y  = sim_acados_in.x0[wy];
 		crazyflie_state.rates.z  = sim_acados_in.x0[wz];*/
 
-		crazyflie_state.pos.x    = sim_acados_out.xn[xq];
+		/*crazyflie_state.pos.x    = sim_acados_out.xn[xq];
 		crazyflie_state.pos.y    = sim_acados_out.xn[yq];
 		crazyflie_state.pos.z    = sim_acados_out.xn[zq];
 		crazyflie_state.vel.x    = sim_acados_out.xn[vbx];
@@ -643,7 +669,21 @@ class ESTIMATOR
 		crazyflie_state.quat.z   = sim_acados_out.xn[qz];
 		crazyflie_state.rates.x  = sim_acados_out.xn[wx];
 		crazyflie_state.rates.y  = sim_acados_out.xn[wy];
-		crazyflie_state.rates.z  = sim_acados_out.xn[wz];
+		crazyflie_state.rates.z  = sim_acados_out.xn[wz]; */
+
+		crazyflie_state.pos.x    = sim_acados_cap->acados_sim_out->xn[xq];
+		crazyflie_state.pos.y    = sim_acados_cap->acados_sim_out->xn[yq];
+		crazyflie_state.pos.z    = sim_acados_cap->acados_sim_out->xn[zq];
+		crazyflie_state.vel.x    = sim_acados_cap->acados_sim_out->xn[vbx];
+		crazyflie_state.vel.y    = sim_acados_cap->acados_sim_out->xn[vby];
+		crazyflie_state.vel.z    = sim_acados_cap->acados_sim_out->xn[vbz];
+		crazyflie_state.quat.w   = sim_acados_cap->acados_sim_out->xn[qw];
+		crazyflie_state.quat.x   = sim_acados_cap->acados_sim_out->xn[qx];
+		crazyflie_state.quat.y   = sim_acados_cap->acados_sim_out->xn[qy];
+		crazyflie_state.quat.z   = sim_acados_cap->acados_sim_out->xn[qz];
+		crazyflie_state.rates.x  = sim_acados_cap->acados_sim_out->xn[wx];
+		crazyflie_state.rates.y  = sim_acados_cap->acados_sim_out->xn[wy];
+		crazyflie_state.rates.z  = sim_acados_cap->acados_sim_out->xn[wz];
 
 		p_cf_state.publish(crazyflie_state);
 

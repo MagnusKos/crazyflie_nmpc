@@ -37,21 +37,22 @@
 				"
 	/-->
 
-	<node name="acados_bag"
+	<!-- <node name="acados_bag"
 				pkg="rosbag"
 				type="record"
 				args="record -o /home/constantine/cf_mpc.bag
 					/cf_mpc_est/state_estimate
 					/crazyflie/pose"
 				>
-	</node>
+	</node> -->
 
 	<!--node name="nmpc" pkg="crazyflie_controller" type="acados_mpc" output="screen" ns="crazyflie">
 		<param name="ref_traj" value="$(find crazyflie_controller)/traj/smooth_step.txt"/>
 		<param name="ref_traj" value="$(find crazyflie_controller)/traj/helix_traj.txt"/>
 	</node-->
 
-	<node name="estimator" pkg="crazyflie_controller" type="acados_estimator" output="screen" ns="crazyflie">
+	<node name="estimator" pkg="crazyflie_controller" type="acados_estimator" output="screen" ns="crazyflie"
+	launch-prefix="xterm -e gdb --args">
 		<param name="delay" value='0.06'/>
 	</node>
 

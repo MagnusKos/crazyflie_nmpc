@@ -207,6 +207,7 @@ class NMPC
 	solver_input acados_in;
 	solver_output acados_out;
 	int acados_status;
+	nlp_solver_capsule * mpc_acados_cap; //new acados structure
 
 	reference_mode policy;
 
@@ -222,7 +223,16 @@ public:
 		int status = 0;
 		double WN_factor = 50;
 
-		status = acados_create();
+		//status = acados_create();
+		mpc_acados_cap = crazyflie_acados_create_capsule();
+		status = crazyflie_acados_create(mpc_acados_cap);
+
+		nlp_in = crazyflie_acados_get_nlp_in(mpc_acados_cap);
+		nlp_out = crazyflie_acados_get_nlp_out(mpc_acados_cap);
+		nlp_config = crazyflie_acados_get_nlp_config(mpc_acados_cap);
+		nlp_dims = crazyflie_acados_get_nlp_dims(mpc_acados_cap);
+		nlp_opts = crazyflie_acados_get_nlp_opts(mpc_acados_cap);
+		nlp_solver = crazyflie_acados_get_nlp_solver(mpc_acados_cap);
 
 		if (status){
 			ROS_INFO_STREAM("acados_create() returned status " << status << ". Exiting." << endl);
@@ -230,7 +240,7 @@ public:
 		}
 
 		// publisher for the real robot inputs (thrust, roll, pitch, yawrate)
-		p_bodytwist = n.advertise<geometry_msgs::Twist>("/cf_mpc/cmd_inputs", 1);
+		p_bodytwist = n.advertise<geometry_msgs::Twist>("/crazyflie/cmd_vel", 1);
 
 		// publisher for the control inputs of acados (motor speeds to be applied)
 		p_motvel = n.advertise<crazyflie_controller::PropellerSpeedsStamped>("/cf_mpc/acados_mots_rpm", 1);
@@ -415,7 +425,7 @@ public:
 
 	void nmpcReset()
 		{
-		acados_free();
+		crazyflie_acados_free(mpc_acados_cap);
 		}
 
 	int krpm2pwm(double Krpm)
@@ -608,7 +618,7 @@ public:
 			#endif
 
 			// call solver
-			acados_status = acados_solve();
+			acados_status = crazyflie_acados_solve(mpc_acados_cap);
 
 			// assign output signals
 			acados_out.status = acados_status;

@@ -30,7 +30,7 @@ def export_ode_model():
 
     # parameters
     g0  = 9.8066     # [m.s^2] accerelation of gravity
-    mq  = 33e-3      # [kg] total mass (with one marker)
+    mq  = 35.5e-3      # [kg] total mass (with one marker)
     Ixx = 1.395e-5   # [kg.m^2] Inertia moment around x-axis
     Iyy = 1.395e-5   # [kg.m^2] Inertia moment around y-axis
     Izz = 2.173e-5   # [kg.m^2] Inertia moment around z-axis

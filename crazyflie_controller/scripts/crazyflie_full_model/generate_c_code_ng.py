@@ -161,5 +161,6 @@ ra.acados_lib_path      = f'{ACADOS_PATH}/lib'
 ra.model = model
 
 acados_solver = AcadosOcpSolver(ra, json_file = 'acados_ocp.json')
+acados_integrator = AcadosSimSolver(ra, json_file = 'acados_ocp.json')
 
 print('>> NMPC exported')
